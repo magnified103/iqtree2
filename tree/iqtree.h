@@ -348,7 +348,7 @@ public:
      *  @return
      *      <number of NNI steps, number of NNIs> done
      */
-    virtual pair<int, int> optimizeNNI(bool speedNNI = true);
+    virtual pair<int, int> optimizeNNI(bool speedNNI = true, bool SA = false);
 
     /**
      *  Return the current best score found
@@ -448,6 +448,12 @@ public:
      * @return list positive NNIs
      */
     void evaluateNNIs(Branches &nniBranches, vector<NNIMove> &outNNIMoves);
+
+    void evaluateNNISA(Branches &nniBranches, vector<NNIMove> &outNNIMoves, double temp);
+    double sa_context = false;
+    double sa_temp;
+    double sa_temp_start;
+    double sa_temp_end;
 
     double optimizeNNIBranches(Branches &nniBranches);
 

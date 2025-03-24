@@ -32,9 +32,15 @@
 //#include "phylotreemixlen.h"
 //#include "model/modelfactorymixlen.h"
 #include <numeric>
+#include <cmath>
+#include <random>
 #include "utils/tools.h"
 #include "utils/MPIHelper.h"
 #include "utils/pllnni.h"
+
+static std::random_device rd;
+static std::mt19937 rng(rd());
+static std::uniform_real_distribution<double> random_sample(0, 1);
 
 Params *globalParams;
 Alignment *globalAlignment;
@@ -2311,7 +2317,9 @@ double IQTree::doTreeSearch() {
          * Optimize tree with NNI
          *----------------------------------------*/
         pair<int, int> nniInfos; // <num_NNIs, num_steps>
+        this->sa_context = true;
         nniInfos = doNNISearch();
+        this->sa_context = false;
         curTree = getTreeString();
         int pos = addTreeToCandidateSet(curTree, curScore, true, MPIHelper::getInstance().getProcessID());
         if (pos != -2 && pos != -1 && (Params::getInstance().fixStableSplits || Params::getInstance().adaptPertubation))
@@ -2960,7 +2968,7 @@ pair<int, int> IQTree::doNNISearch(bool write_info) {
         readTreeString(string(pllInst->tree_string));
     } else {
         prepareToComputeDistances();
-        nniInfos = optimizeNNI(Params::getInstance().speednni);
+        nniInfos = optimizeNNI(Params::getInstance().speednni, true);
         doneComputingDistances();
         if (isSuperTree()) {
             ((PhyloSuperTree*) this)->computeBranchLengths();
@@ -2993,7 +3001,7 @@ pair<int, int> IQTree::doNNISearch(bool write_info) {
     return nniInfos;
 }
 
-pair<int, int> IQTree::optimizeNNI(bool speedNNI) {
+pair<int, int> IQTree::optimizeNNI(bool speedNNI, bool SA) {
     unsigned int totalNNIApplied = 0;
     unsigned int numSteps = 0;
     const int MAXSTEPS = leafNum;
@@ -3014,6 +3022,10 @@ pair<int, int> IQTree::optimizeNNI(bool speedNNI) {
 
     initProgress(MAXSTEPS, "Optimizing NNI", "done", "step");
     double originalScore = curScore;
+
+    double temp_start = 10;
+    double temp_end = 0.0001;
+
     for (numSteps = 1; numSteps <= MAXSTEPS; numSteps++) {
 
 //        cout << "numSteps = " << numSteps << endl;
@@ -3082,8 +3094,14 @@ pair<int, int> IQTree::optimizeNNI(bool speedNNI) {
             tabuSplits.clear();
         }
 
+        double temp = temp_start * std::pow(temp_end / temp_start, (double) numSteps / MAXSTEPS);
+
         positiveNNIs.clear();
-        evaluateNNIs(nniBranches, positiveNNIs);
+        if (SA) {
+            evaluateNNISA(nniBranches, positiveNNIs, temp);
+        } else {
+            evaluateNNIs(nniBranches, positiveNNIs);
+        }
 
         if (positiveNNIs.size() == 0) {
             if (!nonNNIBranches.empty() && totalNNIApplied == 0) {
@@ -3425,6 +3443,22 @@ void IQTree::evaluateNNIs(Branches &nniBranches, vector<NNIMove>  &positiveNNIs)
     for (Branches::iterator it = nniBranches.begin(); it != nniBranches.end(); it++) {
         NNIMove nni = getBestNNIForBran((PhyloNode*) it->second.first, (PhyloNode*) it->second.second, NULL);
         if (nni.newloglh > curScore) {
+            positiveNNIs.push_back(nni);
+        }
+
+        // synchronize tree during optimization step
+        if (MPIHelper::getInstance().isMaster() && candidateset_changed.size() > 0
+            && MPIHelper::getInstance().gotMessage()) {
+            syncCurrentTree();
+        }
+    }
+}
+
+void IQTree::evaluateNNISA(Branches &nniBranches, vector<NNIMove>  &positiveNNIs, double temp) {
+    double thres = random_sample(rng);
+    for (Branches::iterator it = nniBranches.begin(); it != nniBranches.end(); it++) {
+        NNIMove nni = getBestNNIForBran((PhyloNode*) it->second.first, (PhyloNode*) it->second.second, NULL);
+        if (nni.newloglh > curScore || thres < std::exp((nni.newloglh - curScore) / temp)) {
             positiveNNIs.push_back(nni);
         }
 
