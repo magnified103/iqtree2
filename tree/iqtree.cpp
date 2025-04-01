@@ -2293,6 +2293,11 @@ double IQTree::doTreeSearch() {
     int ufboot_count, ufboot_count_check;
     stop_rule.getUFBootCountCheck(ufboot_count, ufboot_count_check);
 
+    this->sa_temp_start = 10;
+    this->sa_temp_end = 0.001;
+    this->sa_max_iter = 50;
+    this->sa_current_iter = 0;
+
     while (!stop_rule.meetStopCondition(stop_rule.getCurIt(), cur_correlation)) {
 
         searchinfo.curIter = stop_rule.getCurIt();
@@ -2318,6 +2323,15 @@ double IQTree::doTreeSearch() {
          *----------------------------------------*/
         pair<int, int> nniInfos; // <num_NNIs, num_steps>
         this->sa_context = true;
+        if (stop_rule.getCurIt() % 10 == 0) {
+            this->sa_current_iter += 1;
+        }
+        if (this->sa_current_iter >= this->sa_max_iter) {
+            // temp restart
+            this->sa_current_iter = 0;
+        }
+        this->sa_temp = this->sa_temp_start * std::pow(this->sa_temp_end / this->sa_temp_start,
+                                                       this->sa_current_iter / this->sa_max_iter);
         nniInfos = doNNISearch();
         this->sa_context = false;
         curTree = getTreeString();
@@ -3023,9 +3037,6 @@ pair<int, int> IQTree::optimizeNNI(bool speedNNI, bool SA) {
     initProgress(MAXSTEPS, "Optimizing NNI", "done", "step");
     double originalScore = curScore;
 
-    double temp_start = 10;
-    double temp_end = 0.0001;
-
     for (numSteps = 1; numSteps <= MAXSTEPS; numSteps++) {
 
 //        cout << "numSteps = " << numSteps << endl;
@@ -3094,11 +3105,11 @@ pair<int, int> IQTree::optimizeNNI(bool speedNNI, bool SA) {
             tabuSplits.clear();
         }
 
-        double temp = temp_start * std::pow(temp_end / temp_start, (double) numSteps / MAXSTEPS);
+//        double temp = temp_start * std::pow(temp_end / temp_start, (double) numSteps / MAXSTEPS);
 
         positiveNNIs.clear();
-        if (SA) {
-            evaluateNNISA(nniBranches, positiveNNIs, temp);
+        if (this->sa_context) {
+            evaluateNNISA(nniBranches, positiveNNIs, this->sa_temp);
         } else {
             evaluateNNIs(nniBranches, positiveNNIs);
         }

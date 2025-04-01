@@ -450,10 +450,12 @@ public:
     void evaluateNNIs(Branches &nniBranches, vector<NNIMove> &outNNIMoves);
 
     void evaluateNNISA(Branches &nniBranches, vector<NNIMove> &outNNIMoves, double temp);
-    double sa_context = false;
+    bool sa_context = false;
     double sa_temp;
     double sa_temp_start;
     double sa_temp_end;
+    int sa_max_iter;
+    int sa_current_iter;
 
     double optimizeNNIBranches(Branches &nniBranches);
 
