@@ -38,10 +38,6 @@
 #include "utils/MPIHelper.h"
 #include "utils/pllnni.h"
 
-static std::random_device rd;
-static std::mt19937 rng(rd());
-static std::uniform_real_distribution<double> random_sample(0, 1);
-
 Params *globalParams;
 Alignment *globalAlignment;
 extern StringIntMap pllTreeCounter;
@@ -2293,8 +2289,12 @@ double IQTree::doTreeSearch() {
     int ufboot_count, ufboot_count_check;
     stop_rule.getUFBootCountCheck(ufboot_count, ufboot_count_check);
 
-    this->sa_temp_start = 10;
-    this->sa_temp_end = 0.001;
+    // dna_M214_295_1836
+    // temp_start = 100
+    // temp_end = 0.001
+
+    this->sa_temp_start = 0.005;
+    this->sa_temp_end = 0.0005;
     this->sa_max_iter = 50;
     this->sa_current_iter = 0;
 
@@ -2323,21 +2323,33 @@ double IQTree::doTreeSearch() {
          *----------------------------------------*/
         pair<int, int> nniInfos; // <num_NNIs, num_steps>
         this->sa_context = true;
-        if (stop_rule.getCurIt() % 10 == 0) {
-            this->sa_current_iter += 1;
+        if (!params->sa_enabled) {
+            this->sa_context = false;
         }
-        if (this->sa_current_iter >= this->sa_max_iter) {
-            // temp restart
-            this->sa_current_iter = 0;
+        if (this->sa_context) {
+            if (stop_rule.getCurIt() % 10 == 0) {
+                this->sa_current_iter += 1;
+            }
+            if (this->sa_current_iter >= this->sa_max_iter) {
+                // temp restart
+                this->sa_current_iter = 0;
+                cout << "SA: reheat" << endl;
+            }
+            this->sa_temp = this->sa_temp_start * std::pow(this->sa_temp_end / this->sa_temp_start,
+                                                           (double)this->sa_current_iter / this->sa_max_iter);
+            cout << "SA: temperature equals " << this->sa_temp << endl;
         }
-        this->sa_temp = this->sa_temp_start * std::pow(this->sa_temp_end / this->sa_temp_start,
-                                                       this->sa_current_iter / this->sa_max_iter);
         nniInfos = doNNISearch();
         this->sa_context = false;
         curTree = getTreeString();
         int pos = addTreeToCandidateSet(curTree, curScore, true, MPIHelper::getInstance().getProcessID());
         if (pos != -2 && pos != -1 && (Params::getInstance().fixStableSplits || Params::getInstance().adaptPertubation))
             candidateTrees.computeSplitOccurences(Params::getInstance().stableSplitThreshold);
+//        if (pos == 1) {
+//            // best tree
+//            this->sa_current_iter = 0;
+//            cout << "SA: reheat" << endl;
+//        }
 
         if (MPIHelper::getInstance().isWorker() || MPIHelper::getInstance().gotMessage())
             syncCurrentTree();
@@ -3108,11 +3120,7 @@ pair<int, int> IQTree::optimizeNNI(bool speedNNI, bool SA) {
 //        double temp = temp_start * std::pow(temp_end / temp_start, (double) numSteps / MAXSTEPS);
 
         positiveNNIs.clear();
-        if (this->sa_context) {
-            evaluateNNISA(nniBranches, positiveNNIs, this->sa_temp);
-        } else {
-            evaluateNNIs(nniBranches, positiveNNIs);
-        }
+        evaluateNNIs(nniBranches, positiveNNIs);
 
         if (positiveNNIs.size() == 0) {
             if (!nonNNIBranches.empty() && totalNNIApplied == 0) {
@@ -3137,7 +3145,7 @@ pair<int, int> IQTree::optimizeNNI(bool speedNNI, bool SA) {
         curScore = optimizeAllBranches(1, params->loglh_epsilon, PLL_NEWZPERCYCLE);
 
         if (curScore < appliedNNIs.at(0).newloglh - params->loglh_epsilon) {
-            //cout << "Tree getting worse: curScore = " << curScore << " / best score = " <<  appliedNNIs.at(0).newloglh << endl;
+//            cout << "Tree getting worse: curScore = " << curScore << " / best score = " <<  appliedNNIs.at(0).newloglh << endl;
             // tree cannot be worse if only 1 NNI is applied
             if (appliedNNIs.size() > 1) {
                 // revert all applied NNIs
@@ -3453,7 +3461,7 @@ void IQTree::setDelete(int _delete) {
 void IQTree::evaluateNNIs(Branches &nniBranches, vector<NNIMove>  &positiveNNIs) {
     for (Branches::iterator it = nniBranches.begin(); it != nniBranches.end(); it++) {
         NNIMove nni = getBestNNIForBran((PhyloNode*) it->second.first, (PhyloNode*) it->second.second, NULL);
-        if (nni.newloglh > curScore) {
+        if (nni.newloglh > curScore || (this->sa_context && random_double() < std::exp((nni.newloglh - curScore) / this->sa_temp))) {
             positiveNNIs.push_back(nni);
         }
 
@@ -3466,7 +3474,7 @@ void IQTree::evaluateNNIs(Branches &nniBranches, vector<NNIMove>  &positiveNNIs)
 }
 
 void IQTree::evaluateNNISA(Branches &nniBranches, vector<NNIMove>  &positiveNNIs, double temp) {
-    double thres = random_sample(rng);
+    double thres = random_double();
     for (Branches::iterator it = nniBranches.begin(); it != nniBranches.end(); it++) {
         NNIMove nni = getBestNNIForBran((PhyloNode*) it->second.first, (PhyloNode*) it->second.second, NULL);
         if (nni.newloglh > curScore || thres < std::exp((nni.newloglh - curScore) / temp)) {

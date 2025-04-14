@@ -1541,6 +1541,11 @@ public:
     bool tree_spr;
 
     /**
+     *      true if one wants to use simulated annealing
+     */
+    bool sa_enabled;
+
+    /**
             true if printing out of optimal sets in NEXUS format
      */
     bool nexus_output;

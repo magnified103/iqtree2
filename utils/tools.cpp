@@ -1148,6 +1148,7 @@ void parseArg(int argc, char *argv[], Params &params) {
 //    params.parsimony = false;
 //    params.parsimony_tree = false;
     params.tree_spr = false;
+    params.sa_enabled = false;
     params.nexus_output = false;
     params.k_representative = 4;
     params.loglh_epsilon = 0.001;
@@ -3177,6 +3178,10 @@ void parseArg(int argc, char *argv[], Params &params) {
 				params.tree_spr = true;
 				continue;
 			}
+            if (strcmp(argv[cnt], "-sa_enabled") == 0) {
+                params.sa_enabled = true;
+                continue;
+            }
 			if (strcmp(argv[cnt], "-krep") == 0) {
 				cnt++;
 				if (cnt >= argc)
