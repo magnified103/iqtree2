@@ -2293,9 +2293,12 @@ double IQTree::doTreeSearch() {
     // temp_start = 100
     // temp_end = 0.001
 
-    this->sa_temp_start = 0.005;
-    this->sa_temp_end = 0.0005;
-    this->sa_max_iter = 50;
+    // 0.2, 0.02, 20
+    // 0.5, 0.05, 20
+
+    this->sa_temp_start = 0.5;
+    this->sa_temp_end = 0.05;
+    this->sa_max_iter = 20;
     this->sa_current_iter = 0;
 
     while (!stop_rule.meetStopCondition(stop_rule.getCurIt(), cur_correlation)) {
@@ -2327,7 +2330,7 @@ double IQTree::doTreeSearch() {
             this->sa_context = false;
         }
         if (this->sa_context) {
-            if (stop_rule.getCurIt() % 10 == 0) {
+            if (stop_rule.getCurIt() % 1 == 0) {
                 this->sa_current_iter += 1;
             }
             if (this->sa_current_iter >= this->sa_max_iter) {
@@ -2345,11 +2348,11 @@ double IQTree::doTreeSearch() {
         int pos = addTreeToCandidateSet(curTree, curScore, true, MPIHelper::getInstance().getProcessID());
         if (pos != -2 && pos != -1 && (Params::getInstance().fixStableSplits || Params::getInstance().adaptPertubation))
             candidateTrees.computeSplitOccurences(Params::getInstance().stableSplitThreshold);
-//        if (pos == 1) {
-//            // best tree
-//            this->sa_current_iter = 0;
-//            cout << "SA: reheat" << endl;
-//        }
+       if (pos == 1) {
+           // best tree
+           this->sa_current_iter = 0;
+           cout << "SA: reheat" << endl;
+       }
 
         if (MPIHelper::getInstance().isWorker() || MPIHelper::getInstance().gotMessage())
             syncCurrentTree();
@@ -3144,24 +3147,49 @@ pair<int, int> IQTree::optimizeNNI(bool speedNNI, bool SA) {
         doNNIs(appliedNNIs);
         curScore = optimizeAllBranches(1, params->loglh_epsilon, PLL_NEWZPERCYCLE);
 
-        if (curScore < appliedNNIs.at(0).newloglh - params->loglh_epsilon) {
-//            cout << "Tree getting worse: curScore = " << curScore << " / best score = " <<  appliedNNIs.at(0).newloglh << endl;
-            // tree cannot be worse if only 1 NNI is applied
-            if (appliedNNIs.size() > 1) {
-                // revert all applied NNIs
-                doNNIs(appliedNNIs);
-                restoreBranchLengths(lenvec);
-                clearAllPartialLH();
-                // only do the best NNI
-                appliedNNIs.resize(1);
-                doNNIs(appliedNNIs);
-                curScore = optimizeAllBranches(1, params->loglh_epsilon, PLL_NEWZPERCYCLE);
-                ASSERT(curScore > appliedNNIs.at(0).newloglh - 0.1);
-            } else
-                ASSERT(curScore > appliedNNIs.at(0).newloglh - 0.1 && "Using one NNI reduces LogL");
-            totalNNIApplied++;
+        if (this->sa_context) {
+            if (curScore < appliedNNIs.at(0).newloglh - params->loglh_epsilon) {
+                double diff = appliedNNIs.at(0).newloglh - params->loglh_epsilon - curScore;
+                if (random_double() < std::exp(-diff / this->sa_temp)) {
+                    // accept the worse tree
+                    cout << "Accept worse tree: " << curScore << " / " << appliedNNIs.at(0).newloglh << endl;
+                    totalNNIApplied += appliedNNIs.size();
+                } else {
+                    // revert all applied NNIs
+                    doNNIs(appliedNNIs);
+                    restoreBranchLengths(lenvec);
+                    clearAllPartialLH();
+                    // only do the best NNI
+                    appliedNNIs.resize(1);
+                    doNNIs(appliedNNIs);
+                    curScore = optimizeAllBranches(1, params->loglh_epsilon, PLL_NEWZPERCYCLE);
+                    ASSERT(curScore > appliedNNIs.at(0).newloglh - 0.1);
+                    totalNNIApplied++;
+                }
+            } else {
+                // accept the better tree
+                totalNNIApplied += appliedNNIs.size();
+            }
         } else {
-            totalNNIApplied += appliedNNIs.size();
+            if (curScore < appliedNNIs.at(0).newloglh - params->loglh_epsilon) {
+    //            cout << "Tree getting worse: curScore = " << curScore << " / best score = " <<  appliedNNIs.at(0).newloglh << endl;
+                // tree cannot be worse if only 1 NNI is applied
+                if (appliedNNIs.size() > 1) {
+                    // revert all applied NNIs
+                    doNNIs(appliedNNIs);
+                    restoreBranchLengths(lenvec);
+                    clearAllPartialLH();
+                    // only do the best NNI
+                    appliedNNIs.resize(1);
+                    doNNIs(appliedNNIs);
+                    curScore = optimizeAllBranches(1, params->loglh_epsilon, PLL_NEWZPERCYCLE);
+                    ASSERT(curScore > appliedNNIs.at(0).newloglh - 0.1);
+                } else
+                    ASSERT(curScore > appliedNNIs.at(0).newloglh - 0.1 && "Using one NNI reduces LogL");
+                totalNNIApplied++;
+            } else {
+                totalNNIApplied += appliedNNIs.size();
+            }
         }
 
         if(curScore < oldScore - params->loglh_epsilon){
@@ -3461,7 +3489,7 @@ void IQTree::setDelete(int _delete) {
 void IQTree::evaluateNNIs(Branches &nniBranches, vector<NNIMove>  &positiveNNIs) {
     for (Branches::iterator it = nniBranches.begin(); it != nniBranches.end(); it++) {
         NNIMove nni = getBestNNIForBran((PhyloNode*) it->second.first, (PhyloNode*) it->second.second, NULL);
-        if (nni.newloglh > curScore || (this->sa_context && random_double() < std::exp((nni.newloglh - curScore) / this->sa_temp))) {
+        if (nni.newloglh > curScore) {
             positiveNNIs.push_back(nni);
         }
 
