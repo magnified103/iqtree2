@@ -1544,6 +1544,9 @@ public:
      *      true if one wants to use simulated annealing
      */
     bool sa_enabled;
+    double sa_temp_start;
+    double sa_temp_end;
+    int sa_max_iter;
 
     /**
             true if printing out of optimal sets in NEXUS format

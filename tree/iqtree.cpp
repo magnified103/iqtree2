@@ -2296,9 +2296,11 @@ double IQTree::doTreeSearch() {
     // 0.2, 0.02, 20
     // 0.5, 0.05, 20
 
-    this->sa_temp_start = 0.5;
-    this->sa_temp_end = 0.05;
-    this->sa_max_iter = 20;
+    this->sa_initial_temp_start = params->sa_temp_start;
+    this->sa_initial_temp_end = params->sa_temp_end;
+    this->sa_temp_start = this->sa_initial_temp_start;
+    this->sa_temp_end = this->sa_initial_temp_end;
+    this->sa_max_iter = params->sa_max_iter;
     this->sa_current_iter = 0;
 
     while (!stop_rule.meetStopCondition(stop_rule.getCurIt(), cur_correlation)) {
@@ -2336,6 +2338,7 @@ double IQTree::doTreeSearch() {
             if (this->sa_current_iter >= this->sa_max_iter) {
                 // temp restart
                 this->sa_current_iter = 0;
+//                this->sa_temp_start += 1;
                 cout << "SA: reheat" << endl;
             }
             this->sa_temp = this->sa_temp_start * std::pow(this->sa_temp_end / this->sa_temp_start,
@@ -2351,6 +2354,7 @@ double IQTree::doTreeSearch() {
        if (pos == 1) {
            // best tree
            this->sa_current_iter = 0;
+           this->sa_temp_start = sa_initial_temp_start;
            cout << "SA: reheat" << endl;
        }
 

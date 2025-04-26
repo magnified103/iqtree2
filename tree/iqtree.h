@@ -454,6 +454,8 @@ public:
     double sa_temp;
     double sa_temp_start;
     double sa_temp_end;
+    double sa_initial_temp_start;
+    double sa_initial_temp_end;
     int sa_max_iter;
     int sa_current_iter;
 

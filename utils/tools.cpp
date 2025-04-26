@@ -1149,6 +1149,9 @@ void parseArg(int argc, char *argv[], Params &params) {
 //    params.parsimony_tree = false;
     params.tree_spr = false;
     params.sa_enabled = false;
+    params.sa_temp_start = 0.5;
+    params.sa_temp_end = 0.05;
+    params.sa_max_iter = 20;
     params.nexus_output = false;
     params.k_representative = 4;
     params.loglh_epsilon = 0.001;
@@ -3180,6 +3183,27 @@ void parseArg(int argc, char *argv[], Params &params) {
 			}
             if (strcmp(argv[cnt], "-sa_enabled") == 0) {
                 params.sa_enabled = true;
+                continue;
+            }
+            if (strcmp(argv[cnt], "-sa_temp_start") == 0) {
+                cnt++;
+                if (cnt >= argc)
+                    throw "Use -sa_temp_start <start temp>";
+                params.sa_temp_start = convert_double(argv[cnt]);
+                continue;
+            }
+            if (strcmp(argv[cnt], "-sa_temp_end") == 0) {
+                cnt++;
+                if (cnt >= argc)
+                    throw "Use -sa_temp_end <end temp>";
+                params.sa_temp_end = convert_double(argv[cnt]);
+                continue;
+            }
+            if (strcmp(argv[cnt], "-sa_max_iter") == 0) {
+                cnt++;
+                if (cnt >= argc)
+                    throw "Use -sa_max_iter <number of iters>";
+                params.sa_max_iter = convert_int(argv[cnt]);
                 continue;
             }
 			if (strcmp(argv[cnt], "-krep") == 0) {
