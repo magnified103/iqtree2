@@ -33,6 +33,7 @@
 #include "node.h"
 #include "candidateset.h"
 #include "utils/pllnni.h"
+#include "cooling_sched.h"
 
 typedef std::map< string, double > mapString2Double;
 typedef std::multiset< double, std::less< double > > multiSetDB;
@@ -452,12 +453,7 @@ public:
     void evaluateNNISA(Branches &nniBranches, vector<NNIMove> &outNNIMoves, double temp);
     bool sa_context = false;
     double sa_temp;
-    double sa_temp_start;
-    double sa_temp_end;
-    double sa_initial_temp_start;
-    double sa_initial_temp_end;
-    int sa_max_iter;
-    int sa_current_iter;
+    std::unique_ptr<sa::CoolingSchedule> sa_cooling_sched;
 
     double optimizeNNIBranches(Branches &nniBranches);
 

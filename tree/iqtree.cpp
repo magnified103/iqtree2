@@ -37,6 +37,7 @@
 #include "utils/tools.h"
 #include "utils/MPIHelper.h"
 #include "utils/pllnni.h"
+#include "cooling_sched.h"
 
 Params *globalParams;
 Alignment *globalAlignment;
@@ -2296,12 +2297,10 @@ double IQTree::doTreeSearch() {
     // 0.2, 0.02, 20
     // 0.5, 0.05, 20
 
-    this->sa_initial_temp_start = params->sa_temp_start;
-    this->sa_initial_temp_end = params->sa_temp_end;
-    this->sa_temp_start = this->sa_initial_temp_start;
-    this->sa_temp_end = this->sa_initial_temp_end;
-    this->sa_max_iter = params->sa_max_iter;
-    this->sa_current_iter = 0;
+    if (params->sa_strategy == 3) {
+        json sa_cooling_config = json::parse(params->sa_cooling_config);
+        this->sa_cooling_sched = sa::createCoolingSchedule(sa_cooling_config);
+    }
 
     while (!stop_rule.meetStopCondition(stop_rule.getCurIt(), cur_correlation)) {
 
@@ -2327,36 +2326,28 @@ double IQTree::doTreeSearch() {
          * Optimize tree with NNI
          *----------------------------------------*/
         pair<int, int> nniInfos; // <num_NNIs, num_steps>
-        this->sa_context = true;
-        if (!params->sa_enabled) {
-            this->sa_context = false;
+        if (params->sa_strategy == 3) {
+            this->sa_context = true;
         }
         if (this->sa_context) {
-            if (stop_rule.getCurIt() % 1 == 0) {
-                this->sa_current_iter += 1;
-            }
-            if (this->sa_current_iter >= this->sa_max_iter) {
-                // temp restart
-                this->sa_current_iter = 0;
-//                this->sa_temp_start += 1;
-                cout << "SA: reheat" << endl;
-            }
-            this->sa_temp = this->sa_temp_start * std::pow(this->sa_temp_end / this->sa_temp_start,
-                                                           (double)this->sa_current_iter / this->sa_max_iter);
+            this->sa_cooling_sched->increaseIterCount();
+            this->sa_temp = this->sa_cooling_sched->getTemperature();
             cout << "SA: temperature equals " << this->sa_temp << endl;
         }
         nniInfos = doNNISearch();
-        this->sa_context = false;
         curTree = getTreeString();
         int pos = addTreeToCandidateSet(curTree, curScore, true, MPIHelper::getInstance().getProcessID());
         if (pos != -2 && pos != -1 && (Params::getInstance().fixStableSplits || Params::getInstance().adaptPertubation))
             candidateTrees.computeSplitOccurences(Params::getInstance().stableSplitThreshold);
-       if (pos == 1) {
-           // best tree
-           this->sa_current_iter = 0;
-           this->sa_temp_start = sa_initial_temp_start;
-           cout << "SA: reheat" << endl;
-       }
+        if (this->sa_context) {
+            if (pos == 1) {
+                this->sa_cooling_sched->reheat();
+                cout << "SA: reheat" << endl;
+            }
+        }
+        if (params->sa_strategy == 3) {
+            this->sa_context = false;
+        }
 
         if (MPIHelper::getInstance().isWorker() || MPIHelper::getInstance().gotMessage())
             syncCurrentTree();

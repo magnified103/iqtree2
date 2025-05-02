@@ -54,6 +54,8 @@ parstree.h
 discordance.cpp
 phylohmm.cpp
 phylohmm.h
+cooling_sched.cpp
+cooling_sched.h
 )
 
 target_link_libraries(tree pll model alignment)

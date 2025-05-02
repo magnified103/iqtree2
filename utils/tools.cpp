@@ -1148,10 +1148,7 @@ void parseArg(int argc, char *argv[], Params &params) {
 //    params.parsimony = false;
 //    params.parsimony_tree = false;
     params.tree_spr = false;
-    params.sa_enabled = false;
-    params.sa_temp_start = 0.5;
-    params.sa_temp_end = 0.05;
-    params.sa_max_iter = 20;
+    params.sa_strategy = 0; // disabled
     params.nexus_output = false;
     params.k_representative = 4;
     params.loglh_epsilon = 0.001;
@@ -3181,29 +3178,18 @@ void parseArg(int argc, char *argv[], Params &params) {
 				params.tree_spr = true;
 				continue;
 			}
-            if (strcmp(argv[cnt], "-sa_enabled") == 0) {
-                params.sa_enabled = true;
-                continue;
-            }
-            if (strcmp(argv[cnt], "-sa_temp_start") == 0) {
+            if (strcmp(argv[cnt], "-sa_cooling_config") == 0) {
                 cnt++;
                 if (cnt >= argc)
-                    throw "Use -sa_temp_start <start temp>";
-                params.sa_temp_start = convert_double(argv[cnt]);
+                    throw "Use -sa_cooling_config <cooling_conf>";
+                params.sa_cooling_config = string(argv[cnt]);
                 continue;
             }
-            if (strcmp(argv[cnt], "-sa_temp_end") == 0) {
+            if (strcmp(argv[cnt], "-sa_strat") == 0) {
                 cnt++;
                 if (cnt >= argc)
-                    throw "Use -sa_temp_end <end temp>";
-                params.sa_temp_end = convert_double(argv[cnt]);
-                continue;
-            }
-            if (strcmp(argv[cnt], "-sa_max_iter") == 0) {
-                cnt++;
-                if (cnt >= argc)
-                    throw "Use -sa_max_iter <number of iters>";
-                params.sa_max_iter = convert_int(argv[cnt]);
+                    throw "Use -sa_strat <strategy>";
+                params.sa_strategy = convert_int(argv[cnt]);
                 continue;
             }
 			if (strcmp(argv[cnt], "-krep") == 0) {
