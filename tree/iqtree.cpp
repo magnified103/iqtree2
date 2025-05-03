@@ -2290,20 +2290,14 @@ double IQTree::doTreeSearch() {
     int ufboot_count, ufboot_count_check;
     stop_rule.getUFBootCountCheck(ufboot_count, ufboot_count_check);
 
-    // dna_M214_295_1836
-    // temp_start = 100
-    // temp_end = 0.001
-
-    // 0.2, 0.02, 20
-    // 0.5, 0.05, 20
-
     if (params->sa_strategy) {
         json sa_cooling_config = json::parse(params->sa_cooling_config);
         json sa_acceptance_config = json::parse(params->sa_acceptance_config);
 
         // update sa seed
         int seed = random_int(1000000000);
-        sa_cooling_config["seed"] = seed;
+        sa_acceptance_config["seed"] = seed;
+
         this->sa_cooling_sched = sa::createCoolingSchedule(sa_cooling_config);
         this->sa_acceptance_criterion = sa::createAcceptanceCriterion(sa_acceptance_config);
     }
@@ -2335,10 +2329,15 @@ double IQTree::doTreeSearch() {
         if (params->sa_strategy == 3) {
             this->sa_context = true;
         }
+        if (params->sa_strategy == 2) {
+            this->sa_context = true;
+        }
         if (this->sa_context) {
             this->sa_cooling_sched->increaseIterCount();
             this->sa_temp = this->sa_cooling_sched->getTemperature();
             cout << "SA: temperature equals " << this->sa_temp << endl;
+            // double averageDelta = this->sa_acceptance_criterion->bestScore - this->sa_acceptance_criterion->sumOfScores / this->sa_acceptance_criterion->numOfScores;
+            // cout << "SA: exp equals " << std::exp(-1.0 / averageDelta / this->sa_temp) << endl;
         }
         nniInfos = doNNISearch();
         curTree = getTreeString();
@@ -2352,6 +2351,9 @@ double IQTree::doTreeSearch() {
             }
         }
         if (params->sa_strategy == 3) {
+            this->sa_context = false;
+        }
+        if (params->sa_strategy == 2) {
             this->sa_context = false;
         }
 
@@ -3148,7 +3150,12 @@ pair<int, int> IQTree::optimizeNNI(bool speedNNI, bool SA) {
         doNNIs(appliedNNIs);
         curScore = optimizeAllBranches(1, params->loglh_epsilon, PLL_NEWZPERCYCLE);
 
-        if (this->sa_context) {
+        if (this->sa_context && params->sa_strategy == 3) {
+            this->sa_acceptance_criterion->updateScore(curScore);
+        }
+        // use updateScore for the second strategy here
+        // since the score is less inflated
+        if (this->sa_context && params->sa_strategy == 2) {
             this->sa_acceptance_criterion->updateScore(curScore);
         }
 
@@ -3501,6 +3508,11 @@ void IQTree::setDelete(int _delete) {
 void IQTree::evaluateNNIs(Branches &nniBranches, vector<NNIMove>  &positiveNNIs) {
     for (Branches::iterator it = nniBranches.begin(); it != nniBranches.end(); it++) {
         NNIMove nni = getBestNNIForBran((PhyloNode*) it->second.first, (PhyloNode*) it->second.second, NULL);
+        // don't use updateScore here since the new loglh is purely approximated
+        // and it will inflate the average delta
+        // if (this->sa_context && params->sa_strategy == 2) {
+        //     this->sa_acceptance_criterion->updateScore(nni.newloglh);
+        // }
         if (nni.newloglh > curScore || (this->sa_context && params->sa_strategy == 2 && this->sa_acceptance_criterion->accept(nni.newloglh - curScore, this->sa_temp))) {
             positiveNNIs.push_back(nni);
         }

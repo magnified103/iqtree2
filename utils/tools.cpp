@@ -1149,6 +1149,7 @@ void parseArg(int argc, char *argv[], Params &params) {
 //    params.parsimony_tree = false;
     params.tree_spr = false;
     params.sa_strategy = 0; // disabled
+    params.sa_debug = false; // debugging disabled by default
     params.nexus_output = false;
     params.k_representative = 4;
     params.loglh_epsilon = 0.001;
@@ -3197,6 +3198,10 @@ void parseArg(int argc, char *argv[], Params &params) {
                 if (cnt >= argc)
                     throw "Use -sa_strat <strategy>";
                 params.sa_strategy = convert_int(argv[cnt]);
+                continue;
+            }
+            if (strcmp(argv[cnt], "-sa_debug") == 0) {
+                params.sa_debug = true;
                 continue;
             }
 			if (strcmp(argv[cnt], "-krep") == 0) {

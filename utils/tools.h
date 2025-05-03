@@ -1546,6 +1546,7 @@ public:
     string sa_cooling_config;
     string sa_acceptance_config;
     int sa_strategy;
+    bool sa_debug;
 
     /**
             true if printing out of optimal sets in NEXUS format

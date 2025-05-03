@@ -18,21 +18,11 @@ public:
 };
 
 class AdaptiveBoltzmannAcceptanceCriterion : public AcceptanceCriterion {
-    private:
+private:
     std::mt19937 rnd;
     std::uniform_real_distribution<double> dist;
-    double bestScore;
-    double sumOfScores;
-    int numOfScores;
 public:
-    AdaptiveBoltzmannAcceptanceCriterion(int seed): rnd(seed), dist() {}
-    void updateScore(double score) override {
-        sumOfScores += score;
-        numOfScores++;
-        if (score > bestScore) {
-            bestScore = score;
-        }
-    }
+    AdaptiveBoltzmannAcceptanceCriterion(int seed): rnd(seed), dist(), AcceptanceCriterion() {}
     bool accept(double delta, double temperature) override {
         if (delta > 0) {
             return true;

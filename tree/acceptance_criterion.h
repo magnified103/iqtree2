@@ -10,7 +10,17 @@ using json = nlohmann::json;
 namespace sa {
 class AcceptanceCriterion {
 public:
-    virtual void updateScore(double score) {}
+    double bestScore;
+    double sumOfScores;
+    int numOfScores;
+    AcceptanceCriterion() : bestScore(-1e18), sumOfScores(0), numOfScores(0) {}
+    virtual void updateScore(double score) {
+        sumOfScores += score;
+        numOfScores++;
+        if (score > bestScore) {
+            bestScore = score;
+        }
+    }
     virtual bool accept(double delta, double temperature) = 0;
 };
 
