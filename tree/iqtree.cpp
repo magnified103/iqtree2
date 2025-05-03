@@ -2297,9 +2297,15 @@ double IQTree::doTreeSearch() {
     // 0.2, 0.02, 20
     // 0.5, 0.05, 20
 
-    if (params->sa_strategy == 3) {
+    if (params->sa_strategy) {
         json sa_cooling_config = json::parse(params->sa_cooling_config);
+        json sa_acceptance_config = json::parse(params->sa_acceptance_config);
+
+        // update sa seed
+        int seed = random_int(1000000000);
+        sa_cooling_config["seed"] = seed;
         this->sa_cooling_sched = sa::createCoolingSchedule(sa_cooling_config);
+        this->sa_acceptance_criterion = sa::createAcceptanceCriterion(sa_acceptance_config);
     }
 
     while (!stop_rule.meetStopCondition(stop_rule.getCurIt(), cur_correlation)) {
@@ -3143,9 +3149,13 @@ pair<int, int> IQTree::optimizeNNI(bool speedNNI, bool SA) {
         curScore = optimizeAllBranches(1, params->loglh_epsilon, PLL_NEWZPERCYCLE);
 
         if (this->sa_context) {
+            this->sa_acceptance_criterion->updateScore(curScore);
+        }
+
+        if (this->sa_context && params->sa_strategy == 3) {
             if (curScore < appliedNNIs.at(0).newloglh - params->loglh_epsilon) {
-                double diff = appliedNNIs.at(0).newloglh - params->loglh_epsilon - curScore;
-                if (random_double() < std::exp(-diff / this->sa_temp)) {
+                double diff = params->loglh_epsilon + curScore - appliedNNIs.at(0).newloglh;
+                if (this->sa_acceptance_criterion->accept(diff, this->sa_temp)) {
                     // accept the worse tree
                     cout << "Accept worse tree: " << curScore << " / " << appliedNNIs.at(0).newloglh << endl;
                     totalNNIApplied += appliedNNIs.size();
@@ -3160,6 +3170,8 @@ pair<int, int> IQTree::optimizeNNI(bool speedNNI, bool SA) {
                     curScore = optimizeAllBranches(1, params->loglh_epsilon, PLL_NEWZPERCYCLE);
                     ASSERT(curScore > appliedNNIs.at(0).newloglh - 0.1);
                     totalNNIApplied++;
+                    // update score in SA struct
+                    this->sa_acceptance_criterion->updateScore(curScore);
                 }
             } else {
                 // accept the better tree
@@ -3190,6 +3202,11 @@ pair<int, int> IQTree::optimizeNNI(bool speedNNI, bool SA) {
         if(curScore < oldScore - params->loglh_epsilon){
             hideProgress();
             cout << "$$$$$$$$: " << curScore << "\t" << oldScore << "\t" << curScore - oldScore << endl;
+            showProgress();
+        }
+        if(curScore < originalScore - params->loglh_epsilon){
+            hideProgress();
+            cout << "WORSE THAN ORIGINAL: " << curScore << "\t" << originalScore << "\t" << curScore - originalScore << endl;
             showProgress();
         }
 
@@ -3484,7 +3501,7 @@ void IQTree::setDelete(int _delete) {
 void IQTree::evaluateNNIs(Branches &nniBranches, vector<NNIMove>  &positiveNNIs) {
     for (Branches::iterator it = nniBranches.begin(); it != nniBranches.end(); it++) {
         NNIMove nni = getBestNNIForBran((PhyloNode*) it->second.first, (PhyloNode*) it->second.second, NULL);
-        if (nni.newloglh > curScore) {
+        if (nni.newloglh > curScore || (this->sa_context && params->sa_strategy == 2 && this->sa_acceptance_criterion->accept(nni.newloglh - curScore, this->sa_temp))) {
             positiveNNIs.push_back(nni);
         }
 

@@ -3181,8 +3181,15 @@ void parseArg(int argc, char *argv[], Params &params) {
             if (strcmp(argv[cnt], "-sa_cooling_config") == 0) {
                 cnt++;
                 if (cnt >= argc)
-                    throw "Use -sa_cooling_config <cooling_conf>";
+                    throw "Use -sa_cooling_config <cooling_config>";
                 params.sa_cooling_config = string(argv[cnt]);
+                continue;
+            }
+            if (strcmp(argv[cnt], "-sa_acceptance_config") == 0) {
+                cnt++;
+                if (cnt >= argc)
+                    throw "Use -sa_acceptance_config <acceptance_config>";
+                params.sa_acceptance_config = string(argv[cnt]);
                 continue;
             }
             if (strcmp(argv[cnt], "-sa_strat") == 0) {

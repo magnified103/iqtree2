@@ -34,6 +34,7 @@
 #include "candidateset.h"
 #include "utils/pllnni.h"
 #include "cooling_sched.h"
+#include "acceptance_criterion.h"
 
 typedef std::map< string, double > mapString2Double;
 typedef std::multiset< double, std::less< double > > multiSetDB;
@@ -454,6 +455,7 @@ public:
     bool sa_context = false;
     double sa_temp;
     std::unique_ptr<sa::CoolingSchedule> sa_cooling_sched;
+    std::unique_ptr<sa::AcceptanceCriterion> sa_acceptance_criterion;
 
     double optimizeNNIBranches(Branches &nniBranches);
 

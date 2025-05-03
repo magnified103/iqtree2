@@ -1544,6 +1544,7 @@ public:
      *      true if one wants to use simulated annealing
      */
     string sa_cooling_config;
+    string sa_acceptance_config;
     int sa_strategy;
 
     /**

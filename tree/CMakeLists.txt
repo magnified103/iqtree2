@@ -56,6 +56,8 @@ phylohmm.cpp
 phylohmm.h
 cooling_sched.cpp
 cooling_sched.h
+acceptance_criterion.cpp
+acceptance_criterion.h
 )
 
 target_link_libraries(tree pll model alignment)
