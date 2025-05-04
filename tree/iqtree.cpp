@@ -2197,6 +2197,23 @@ string IQTree::optimizeBranches(int maxTraversal) {
 }
 
 double IQTree::doTreeSearch() {
+    if (params->sa_strategy) {
+        json sa_cooling_config = json::parse(params->sa_cooling_config);
+        json sa_acceptance_config = json::parse(params->sa_acceptance_config);
+
+        // update sa seed
+        int seed = random_int(1000000000);
+        sa_acceptance_config["seed"] = seed;
+
+        if (!sa_cooling_config.contains("max_iter")) {
+            // by default, max_iter is set to the number of leaves
+            // this is a good estimate for unbounded cooling schedules
+            sa_cooling_config["max_iter"] = leafNum;
+        }
+
+        this->sa_cooling_sched = sa::createCoolingSchedule(sa_cooling_config);
+        this->sa_acceptance_criterion = sa::createAcceptanceCriterion(sa_acceptance_config);
+    }
     
     if (params->numInitTrees > 1) {
         cout << "--------------------------------------------------------------------" << endl;
@@ -2290,24 +2307,6 @@ double IQTree::doTreeSearch() {
     int ufboot_count, ufboot_count_check;
     stop_rule.getUFBootCountCheck(ufboot_count, ufboot_count_check);
 
-    if (params->sa_strategy) {
-        json sa_cooling_config = json::parse(params->sa_cooling_config);
-        json sa_acceptance_config = json::parse(params->sa_acceptance_config);
-
-        // update sa seed
-        int seed = random_int(1000000000);
-        sa_acceptance_config["seed"] = seed;
-
-        if (!sa_cooling_config.contains("max_iter")) {
-            // by default, max_iter is set to the number of leaves
-            // this is a good estimate for unbounded cooling schedules
-            sa_cooling_config["max_iter"] = leafNum;
-        }
-
-        this->sa_cooling_sched = sa::createCoolingSchedule(sa_cooling_config);
-        this->sa_acceptance_criterion = sa::createAcceptanceCriterion(sa_acceptance_config);
-    }
-
     while (!stop_rule.meetStopCondition(stop_rule.getCurIt(), cur_correlation)) {
 
         searchinfo.curIter = stop_rule.getCurIt();
@@ -2338,12 +2337,16 @@ double IQTree::doTreeSearch() {
         if (params->sa_strategy == 2) {
             this->sa_context = true;
         }
+        if (params->sa_strategy == 4) {
+            this->sa_context = true;
+        }
         if (this->sa_context) {
             this->sa_cooling_sched->increaseIterCount();
             this->sa_temp = this->sa_cooling_sched->getTemperature();
             cout << "SA: temperature equals " << this->sa_temp << endl;
-            // double averageDelta = this->sa_acceptance_criterion->bestScore - this->sa_acceptance_criterion->sumOfScores / this->sa_acceptance_criterion->numOfScores;
-            // cout << "SA: exp equals " << std::exp(-1.0 / averageDelta / this->sa_temp) << endl;
+            double averageDelta = this->sa_acceptance_criterion->bestScore - this->sa_acceptance_criterion->sumOfScores / this->sa_acceptance_criterion->numOfScores;
+            cout << "SA: exp equals " << std::exp(-1.0 / averageDelta / this->sa_temp) << endl;
+            cout << "SA: avg delta equals " << averageDelta << endl;
         }
         nniInfos = doNNISearch();
         curTree = getTreeString();
@@ -2360,6 +2363,9 @@ double IQTree::doTreeSearch() {
             this->sa_context = false;
         }
         if (params->sa_strategy == 2) {
+            this->sa_context = false;
+        }
+        if (params->sa_strategy == 4) {
             this->sa_context = false;
         }
 
@@ -3156,15 +3162,48 @@ pair<int, int> IQTree::optimizeNNI(bool speedNNI, bool SA) {
         doNNIs(appliedNNIs);
         curScore = optimizeAllBranches(1, params->loglh_epsilon, PLL_NEWZPERCYCLE);
 
-        if (this->sa_context && params->sa_strategy == 3) {
+        // we don't check for sa context since we also want to collect the average during candidate set initialization
+        if (params->sa_strategy == 3) {
             this->sa_acceptance_criterion->updateScore(curScore);
         }
         // use updateScore for the second strategy here
         // since the score is less inflated
-        if (this->sa_context && params->sa_strategy == 2) {
+        if (params->sa_strategy == 2) {
             this->sa_acceptance_criterion->updateScore(curScore);
         }
 
+        if (params->sa_strategy == 4) {
+            this->sa_acceptance_criterion->updateScore(curScore);
+        }
+
+        if (this->sa_context && params->sa_strategy == 4) {
+            if (curScore < oldScore) {
+                // well we don't really care about the tree swap
+                // therefore we either apply every moves or none
+                double diff = curScore - this->sa_acceptance_criterion->bestScore;
+                if (this->sa_acceptance_criterion->accept(diff, this->sa_temp)) {
+                    // accept the worse tree
+                    cout << "Accept worse tree: " << curScore << " / " << oldScore << endl;
+                    totalNNIApplied += appliedNNIs.size();
+                } else {
+                    // revert all applied NNIs
+                    doNNIs(appliedNNIs);
+                    restoreBranchLengths(lenvec);
+                    clearAllPartialLH();
+                    // only do the best NNI
+                    appliedNNIs.resize(1);
+                    doNNIs(appliedNNIs);
+                    curScore = optimizeAllBranches(1, params->loglh_epsilon, PLL_NEWZPERCYCLE);
+                    ASSERT(curScore > appliedNNIs.at(0).newloglh - 0.1);
+                    totalNNIApplied++;
+                    // update score in SA struct
+                    this->sa_acceptance_criterion->updateScore(curScore);
+                }
+            } else {
+                // accept the better tree
+                totalNNIApplied += appliedNNIs.size();
+            }
+        } else
         if (this->sa_context && params->sa_strategy == 3) {
             if (curScore < appliedNNIs.at(0).newloglh - params->loglh_epsilon) {
                 double diff = params->loglh_epsilon + curScore - appliedNNIs.at(0).newloglh;
@@ -3519,6 +3558,13 @@ void IQTree::evaluateNNIs(Branches &nniBranches, vector<NNIMove>  &positiveNNIs)
         // if (this->sa_context && params->sa_strategy == 2) {
         //     this->sa_acceptance_criterion->updateScore(nni.newloglh);
         // }
+        if (this->sa_context && params->sa_strategy == 4) {
+            this->sa_acceptance_criterion->updateScore(nni.newloglh);
+            double diff = nni.newloglh - this->sa_acceptance_criterion->bestScore;
+            if (this->sa_acceptance_criterion->accept(diff, this->sa_temp)) {
+                positiveNNIs.push_back(nni);
+            }
+        } else
         if (nni.newloglh > curScore || (this->sa_context && params->sa_strategy == 2 && this->sa_acceptance_criterion->accept(nni.newloglh - curScore, this->sa_temp))) {
             positiveNNIs.push_back(nni);
         }
