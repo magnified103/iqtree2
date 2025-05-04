@@ -2298,6 +2298,12 @@ double IQTree::doTreeSearch() {
         int seed = random_int(1000000000);
         sa_acceptance_config["seed"] = seed;
 
+        if (!sa_cooling_config.contains("max_iter")) {
+            // by default, max_iter is set to the number of leaves
+            // this is a good estimate for unbounded cooling schedules
+            sa_cooling_config["max_iter"] = leafNum;
+        }
+
         this->sa_cooling_sched = sa::createCoolingSchedule(sa_cooling_config);
         this->sa_acceptance_criterion = sa::createAcceptanceCriterion(sa_acceptance_config);
     }
